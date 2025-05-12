@@ -1,8 +1,11 @@
 package com.example.adminapp
 
+import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.annotation.DrawableRes
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -29,14 +32,18 @@ import androidx.compose.ui.unit.sp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
+
     pendingOrders: Int,
     completedOrders: Int,
     totalEarnings: String,
-    onNavigate: (String) -> Unit
-) {
+    onNavigate: (String) -> Unit,
+
+
+    ) {
+    val context = LocalContext.current
     val navItems = listOf("Home", "Orders", "Profile")
     var selectedItem by remember { mutableStateOf(0) }
-
+    var showNotificationDialog by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -59,7 +66,10 @@ fun AdminDashboardScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Xử lý khi nhấn thông báo */ }) {
+                    IconButton(onClick = {
+                        val intent = Intent(context, NotificationActivity::class.java)
+                        context.startActivity(intent)
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Notifications,
                             contentDescription = "Notifications",
@@ -249,14 +259,3 @@ fun BannerSection() {
     }
 }
 
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun AdminDashboardScreenPreview() {
-    AdminDashboardScreen(
-        pendingOrders = 12,
-        completedOrders = 34,
-        totalEarnings = "$560",
-        onNavigate = {}
-    )
-}

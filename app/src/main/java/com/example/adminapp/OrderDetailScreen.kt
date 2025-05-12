@@ -115,7 +115,7 @@ fun UpdateOrderStatusButton(orderId: String) {
     val context = LocalContext.current
 
     // Create a list of statuses
-    val statuses = listOf("Chờ xác nhận", "Đã xác nhận", "Đang giao hàng")
+    val statuses = listOf("Chờ xác nhận", "Đã xác nhận", "Đang giao hàng", "Đã Giao Hàng Thành Công")
     var selectedStatus by remember { mutableStateOf(statuses[0]) }
 
     // Keep track of dropdown visibility

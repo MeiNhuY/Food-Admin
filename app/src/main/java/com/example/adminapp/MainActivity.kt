@@ -8,20 +8,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.adminapp.MainViewModel.MainViewModel
 import com.example.adminapp.ui.theme.AdminAppTheme
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.fillMaxSize
 import com.google.firebase.Firebase
 import com.google.firebase.initialize
+
 
 
 class MainActivity : ComponentActivity() {
@@ -64,6 +60,7 @@ fun AppNavigation() {
         }
         composable("admin_dashboard") {
             AdminDashboardScreen(
+
                 pendingOrders = 12,
                 completedOrders = 34,
                 totalEarnings = "$560",
@@ -72,6 +69,10 @@ fun AppNavigation() {
                 }
             )
         }
+        composable("chart") {
+            ChartScreen(onBack = { navController.popBackStack() })
+        }
+
 
         //Category
         composable("category") {
@@ -132,13 +133,19 @@ fun AppNavigation() {
 
         //Revenue
         composable("revenue") {
-            RevenueScreen()
+            RevenueScreen(navController)
         }
 
         //Profile
         composable("profile") {
             AdminProfileScreen() // Thêm màn hình profile
         }
+//        composable("order_detail/{orderId}") { backStackEntry ->
+//            val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
+//            OrderDetailScreen(orderId = orderId) {
+//                navController.popBackStack()
+//            }
+//        }
 
     }
 }

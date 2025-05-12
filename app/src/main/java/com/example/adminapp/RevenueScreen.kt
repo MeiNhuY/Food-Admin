@@ -23,8 +23,12 @@ import com.example.adminapp.Domain.OrderModel
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.material.icons.filled.BarChart // Thêm dòng này vào phần import
+import androidx.navigation.NavController
+
+
 @Composable
-fun RevenueScreen() {
+fun RevenueScreen(navController: NavController) {
     val context = LocalContext.current
     var selectedDate by remember { mutableStateOf(Calendar.getInstance().time) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -81,6 +85,16 @@ fun RevenueScreen() {
                 Icon(
                     imageVector = Icons.Default.CalendarToday,
                     contentDescription = "Chọn ngày"
+                )
+            }
+            IconButton(onClick = {
+                navController.navigate("chart")
+                // Chuyển đến màn hình biểu đồ - ví dụ gọi hàm điều hướng
+                // TODO: Gọi NavController điều hướng tới ChartScreen
+            }) {
+                Icon(
+                    imageVector = Icons.Default.BarChart,
+                    contentDescription = "Biểu đồ doanh thu"
                 )
             }
         }
@@ -221,8 +235,8 @@ fun DetailOrderDialog(order: OrderModel, onDismiss: () -> Unit) {
 }
 
 
-@Preview(showBackground = true)
-@Composable
-fun RevenueScreenPreview() {
-    RevenueScreen()
-}
+//@Preview(showBackground = true)
+//@Composable
+//fun RevenueScreenPreview() {
+//    RevenueScreen()
+//}
