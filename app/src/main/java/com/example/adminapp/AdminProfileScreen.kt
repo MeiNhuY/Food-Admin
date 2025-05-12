@@ -1,3 +1,5 @@
+package com.example.adminapp
+
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -34,6 +36,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
+import com.example.adminapp.Domain.UserModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,11 +46,29 @@ fun AdminProfileScreen() {
     var avatarImageUri by remember { mutableStateOf<String?>(null) }
     var location by remember { mutableStateOf("Jaipur") }
 
+    var userProfile by remember { mutableStateOf<UserModel?>(null) }
     var isNameEditable by remember { mutableStateOf(false) }
     var isAddressEditable by remember { mutableStateOf(false) }
     var isEmailEditable by remember { mutableStateOf(false) }
     var isPhoneEditable by remember { mutableStateOf(false) }
     var isPasswordEditable by remember { mutableStateOf(false) }
+
+    val auth = FirebaseAuth.getInstance()
+    val firebaseDatabase = FirebaseDatabase.getInstance()
+
+    // Get the current user's ID and fetch their profile data
+    val currentUser = auth.currentUser
+    currentUser?.uid?.let { uid ->
+        val userRef = firebaseDatabase.getReference("Users").child(uid)
+        userRef.get().addOnSuccessListener { snapshot ->
+            val user = snapshot.getValue(UserModel::class.java)
+            if (user != null) {
+                userProfile = user
+            }
+        }.addOnFailureListener {
+            // Handle the error (optional)
+        }
+    }
 
     val getImageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -54,7 +77,6 @@ fun AdminProfileScreen() {
 
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
-
     var menuIconOffset by remember { mutableStateOf(Offset.Zero) }
 
     Scaffold(
@@ -75,9 +97,7 @@ fun AdminProfileScreen() {
                     },
                     navigationIcon = {
                         Box(modifier = Modifier
-                            .onGloballyPositioned { coordinates ->
-                                menuIconOffset = coordinates.localToWindow(Offset.Zero)
-                            }
+                            .onGloballyPositioned { coordinates -> menuIconOffset = coordinates.localToWindow(Offset.Zero) }
                         ) {
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -94,7 +114,7 @@ fun AdminProfileScreen() {
                 DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
-                    offset = DpOffset(x = 0.dp, y = 6.dp), // hiển thị ngay dưới icon
+                    offset = DpOffset(x = 0.dp, y = 6.dp),
                     modifier = Modifier.background(Color.White)
                 ) {
                     DropdownMenuItem(
@@ -179,17 +199,16 @@ fun AdminProfileScreen() {
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            InfoRow("Name", "Lorem Ipsum", isNameEditable) { isNameEditable = !isNameEditable }
-            InfoRow("Address", "Lorem ipsum placeholder text.", isAddressEditable) { isAddressEditable = !isAddressEditable }
-            InfoRow("Email", "example@gmail.com", isEmailEditable) { isEmailEditable = !isEmailEditable }
-            InfoRow("Phone", "1234567890", isPhoneEditable) { isPhoneEditable = !isPhoneEditable }
-            InfoRow("Password", "********", isPasswordEditable) { isPasswordEditable = !isPasswordEditable }
+            userProfile?.let {
+                InfoRow("Name", it.name, isNameEditable) { isNameEditable = !isNameEditable }
+                InfoRow("Address", it.address, isAddressEditable) { isAddressEditable = !isAddressEditable }
+                InfoRow("Email", it.email, isEmailEditable) { isEmailEditable = !isEmailEditable }
+                InfoRow("Phone", it.phone, isPhoneEditable) { isPhoneEditable = !isPhoneEditable }
+                InfoRow("Password", "********", isPasswordEditable) { isPasswordEditable = !isPasswordEditable }
+            }
         }
     }
 }
-
-
-
 
 @Composable
 fun InfoRow(label: String, value: String, isEditable: Boolean, onEditClick: () -> Unit) {

@@ -1,30 +1,64 @@
 package com.example.adminapp
 
-
+import android.app.DatePickerDialog
+import android.widget.DatePicker
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-
+import com.example.adminapp.Domain.FoodModel
+import com.example.adminapp.Domain.OrderModel
+import com.google.firebase.database.*
+import java.text.SimpleDateFormat
+import java.util.*
 @Composable
 fun RevenueScreen() {
-    var selectedFilter by remember { mutableStateOf("Filter") }
-    var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var selectedDate by remember { mutableStateOf(Calendar.getInstance().time) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var selectedOrder by remember { mutableStateOf<OrderModel?>(null) } // Lưu đơn hàng đã chọn
+    val orders = remember { mutableStateOf<List<OrderModel>>(emptyList()) }
 
-    val filters = listOf("Ngày", "Tuần", "Tháng")
+    // Fetch orders from Firebase
+    LaunchedEffect(Unit) {
+        val dbRef = FirebaseDatabase.getInstance().getReference("Order")
+        dbRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val list = mutableListOf<OrderModel>()
+                for (child in snapshot.children) {
+                    val order = child.getValue(OrderModel::class.java)
+                    if (order != null) {
+                        list.add(order)
+                    }
+                }
+                orders.value = list
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val selectedDateStr = dateFormat.format(selectedDate)
+
+    val filteredOrders = orders.value.filter {
+        val orderDate = Date(it.timestamp)
+        dateFormat.format(orderDate) == selectedDateStr
+    }
+
+    val totalRevenue = filteredOrders.sumOf { it.totalPrice }
 
     Column(
         modifier = Modifier
@@ -43,33 +77,20 @@ fun RevenueScreen() {
                 fontWeight = FontWeight.Bold
             )
 
-            Box {
-                Text(
-                    text = selectedFilter,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { expanded = true }
-                        .background(Color.White)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = Color.Black
+            IconButton(onClick = { showDatePicker = true }) {
+                Icon(
+                    imageVector = Icons.Default.CalendarToday,
+                    contentDescription = "Chọn ngày"
                 )
-
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    filters.forEach { filter ->
-                        DropdownMenuItem(
-                            text = { Text(filter) },
-                            onClick = {
-                                selectedFilter = filter
-                                expanded = false
-                            }
-                        )
-                    }
-                }
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Ngày đã chọn: $selectedDateStr",
+            style = MaterialTheme.typography.bodyLarge
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -80,14 +101,10 @@ fun RevenueScreen() {
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
-                Text("Tổng doanh thu $selectedFilter này", color = Color.White)
+                Text("Tổng doanh thu ngày $selectedDateStr", color = Color.White)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = when (selectedFilter) {
-                        "Ngày" -> "5,000,000đ"
-                        "Tuần" -> "30,000,000đ"
-                        else -> "120,000,000đ"
-                    },
+                    text = "${"%,.0f".format(totalRevenue)}đ",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -97,57 +114,60 @@ fun RevenueScreen() {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("Biểu đồ doanh thu theo $selectedFilter", fontWeight = FontWeight.SemiBold)
+        Text("Giao dịch trong ngày", fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(8.dp))
-        RevenueBarChart(
-            data = when (selectedFilter) {
-                "Ngày" -> listOf(2, 4, 3, 5, 1)
-                "Tuần" -> listOf(30, 45, 60, 80)
-                else -> listOf(100, 120, 140, 160)
-            }
-        )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("Giao dịch gần đây", fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(8.dp))
-        RecentTransactionItem("Ngày 20/4", "15,000,000đ")
-        RecentTransactionItem("Ngày 19/4", "10,500,000đ")
-        RecentTransactionItem("Ngày 18/4", "9,200,000đ")
-    }
-}
-
-@Composable
-fun RevenueBarChart(data: List<Int>) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(120.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        data.forEachIndexed { index, value ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    modifier = Modifier
-                        .width(30.dp)
-                        .height((value * 1.5).dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF81C784))
+        if (filteredOrders.isEmpty()) {
+            Text("Không có giao dịch nào trong ngày này.")
+        } else {
+            filteredOrders.sortedByDescending { it.timestamp }.forEach { order ->
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val timeStr = timeFormat.format(Date(order.timestamp))
+                RecentTransactionItem(
+                    time = "Lúc $timeStr",
+                    amount = "${"%,.0f".format(order.totalPrice)}đ",
+                    onClick = { selectedOrder = order } // Khi nhấn vào giao dịch, lưu lại đơn hàng đã chọn
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("T${index + 1}", style = MaterialTheme.typography.bodySmall)
             }
+        }
+
+        // Hiển thị chi tiết đơn hàng nếu có
+        selectedOrder?.let { order ->
+            DetailOrderDialog(order = order, onDismiss = { selectedOrder = null })
+        }
+    }
+
+    // Màn hình chọn ngày
+    if (showDatePicker) {
+        val calendar = Calendar.getInstance()
+        calendar.time = selectedDate
+        DatePickerDialog(
+            context,
+            { _: DatePicker, year: Int, month: Int, dayOfMonth: Int ->
+                val newCal = Calendar.getInstance()
+                newCal.set(year, month, dayOfMonth)
+                if (newCal.time <= Calendar.getInstance().time) {
+                    selectedDate = newCal.time
+                }
+                showDatePicker = false
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        ).apply {
+            datePicker.maxDate = Calendar.getInstance().timeInMillis
+            show()
         }
     }
 }
 
 @Composable
-fun RecentTransactionItem(date: String, amount: String) {
+fun RecentTransactionItem(time: String, amount: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .clickable { onClick() }, // Thêm sự kiện nhấn vào item
         elevation = CardDefaults.cardElevation(4.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -156,11 +176,50 @@ fun RecentTransactionItem(date: String, amount: String) {
                 .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(date)
+            Text(time)
             Text(amount, fontWeight = FontWeight.Medium)
         }
     }
 }
+
+@Composable
+fun DetailOrderDialog(order: OrderModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Chi tiết đơn hàng") },
+        text = {
+            Column {
+                // Hiển thị các thông tin chung của đơn hàng
+                Text("Mã đơn: ${order.orderId}")
+                Text("Ngày: ${SimpleDateFormat("dd/MM/yyyy").format(Date(order.timestamp))}")
+                Text("Tổng tiền: ${"%,.0f".format(order.totalPrice)}đ")
+                Text("Phương thức thanh toán: ${order.paymentMethod}")
+                Text("Trạng thái: ${order.status}")
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Hiển thị chi tiết các sản phẩm trong đơn hàng
+                Text("Danh sách sản phẩm trong đơn hàng:")
+                order.items.forEach { food ->
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Sản phẩm: ${food.Title}")
+                        Text("Mô tả: ${food.Description}")
+                        Text("Giá: ${"%,.0f".format(food.Price)}đ")
+                        Text("Số lượng: ${food.numberInCart}")
+                        Text("Tổng giá: ${"%,.0f".format(food.Price * food.numberInCart)}đ")
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Đóng")
+            }
+        }
+    )
+}
+
 
 @Preview(showBackground = true)
 @Composable

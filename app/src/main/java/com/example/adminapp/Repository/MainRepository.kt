@@ -1,16 +1,22 @@
 package com.example.adminapp
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
+import androidx.core.content.ContextCompat.startActivity
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.example.adminapp.Domain.CategoryModel
 import com.example.adminapp.Domain.FoodModel
+import com.example.adminapp.Domain.OrderModel
+import com.example.adminapp.Domain.UserModel
+import com.google.android.gms.tasks.Task
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
 import okhttp3.*
@@ -25,6 +31,109 @@ class MainRepository {
 
     private val firebaseDatabase = FirebaseDatabase.getInstance()
 
+    val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
+    fun loginUser(
+        email: String,
+        password: String,
+        onSuccess: (UserModel) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val currentUser = auth.currentUser
+                    currentUser?.let { user ->
+                        val dbRef = FirebaseDatabase.getInstance().getReference("Users").child(user.uid)
+                        dbRef.get().addOnSuccessListener { snapshot ->
+                            if (snapshot.exists()) {
+                                val role = snapshot.child("role").value as? String
+                                if (role == "admin") {
+                                    val userModel = snapshot.getValue(UserModel::class.java)
+                                    if (userModel != null) {
+                                        onSuccess(userModel)
+                                    } else {
+                                        auth.signOut()
+                                        onFailure("Không thể lấy dữ liệu người dùng.")
+                                    }
+                                } else {
+                                    auth.signOut()
+                                    onFailure("Tài khoản không có quyền admin.")
+                                }
+                            } else {
+                                auth.signOut()
+                                onFailure("Không tìm thấy thông tin người dùng.")
+                            }
+                        }.addOnFailureListener {
+                            auth.signOut()
+                            onFailure("Không thể truy cập dữ liệu người dùng.")
+                        }
+                    }
+                } else {
+                    onFailure("Đăng nhập thất bại: ${task.exception?.message}")
+                }
+            }
+    }
+// xử lí order
+    fun updateOrderStatusInDatabase(orderId: String, newStatus: String) {
+        val dbRef = FirebaseDatabase.getInstance().getReference("Order").child(orderId)
+        dbRef.child("status").setValue(newStatus)
+            .addOnSuccessListener {
+                Log.d("UpdateOrder", "Trạng thái đã được cập nhật thành công")
+            }
+            .addOnFailureListener { e ->
+                Log.e("UpdateOrder", "Lỗi khi cập nhật trạng thái", e)
+            }
+    }
+//check admin của order
+    fun checkIfUserIsAdmin(onResult: (Boolean) -> Unit) {
+        val user = auth.currentUser
+        if (user != null) {
+            val userId = user.uid
+            val ref = FirebaseDatabase.getInstance().getReference("Users").child(userId)
+            ref.child("role").get().addOnSuccessListener {
+                val role = it.value as? String
+                Log.d("UserRole", "User role: $role")  // Log the role to check it
+                onResult(role == "admin")
+            }.addOnFailureListener {
+                onResult(false)
+            }
+        } else {
+            onResult(false)
+        }
+    }
+
+
+    fun getOrders(context: Context, callback: (List<OrderModel>) -> Unit) {
+        checkIfUserIsAdmin { isAdmin ->
+            if (isAdmin) {
+                val dbRef = FirebaseDatabase.getInstance().getReference("Order")
+                dbRef.addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        if (snapshot.exists()) {
+                            val ordersList = mutableListOf<OrderModel>()
+                            for (orderSnapshot in snapshot.children) {
+                                val order = orderSnapshot.getValue(OrderModel::class.java)
+                                if (order != null) {
+                                    ordersList.add(order)
+                                }
+                            }
+                            // Pass the orders to the callback function
+                            callback(ordersList)
+                        } else {
+                            Toast.makeText(context, "Không có đơn hàng nào.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        Toast.makeText(context, "Lỗi khi tải đơn hàng", Toast.LENGTH_SHORT).show()
+                    }
+                })
+            } else {
+                Toast.makeText(context, "Bạn không có quyền truy cập", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     fun loadCategory(): LiveData<MutableList<CategoryModel>> {
         val listData = MutableLiveData<MutableList<CategoryModel>>()
         val ref = firebaseDatabase.getReference("Category")

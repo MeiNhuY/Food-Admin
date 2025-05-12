@@ -1,7 +1,8 @@
 package com.example.adminapp
 
-import AdminProfileScreen
-import OrdersScreen
+
+
+import android.app.Application
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -19,6 +20,8 @@ import com.example.adminapp.MainViewModel.MainViewModel
 import com.example.adminapp.ui.theme.AdminAppTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
+import com.google.firebase.Firebase
+import com.google.firebase.initialize
 
 
 class MainActivity : ComponentActivity() {
@@ -36,14 +39,29 @@ class MainActivity : ComponentActivity() {
 @RequiresApi(Build.VERSION_CODES.P)
 @Composable
 fun AppNavigation() {
+    class MyApplication : Application() {
+        override fun onCreate() {
+            super.onCreate()
+            Firebase.initialize(this) // Initialize Firebase
+        }
+    }
 
     val navController = rememberNavController()
     val viewModel: MainViewModel = viewModel()
 
     NavHost(
         navController = navController,
-        startDestination = "admin_dashboard"
+        startDestination = "login"
     ) {
+        composable("login") {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate("admin_dashboard") {
+                        popUpTo("login") { inclusive = true } // Xóa màn hình login khỏi back stack
+                    }
+                }
+            )
+        }
         composable("admin_dashboard") {
             AdminDashboardScreen(
                 pendingOrders = 12,
@@ -96,16 +114,6 @@ fun AppNavigation() {
             val foodId = backStackEntry.arguments?.getString("foodId") ?: ""
             DetailFoodScreen(navController = navController, foodId = foodId)
         }
-
-
-
-
-
-
-
-
-
-
         // Order list screen
         composable("orders") {
             OrdersScreen(

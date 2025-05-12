@@ -1,107 +1,196 @@
 package com.example.adminapp
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.adminapp.Domain.FoodModel
+import com.example.adminapp.Domain.OrderModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import java.text.SimpleDateFormat
+import java.util.*
+import android.widget.Toast
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 
-data class OrderItem(
-    val name: String,
-    val quantity: Int,
-    val pricePerItem: Double
-)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrderDetailScreen(orderId: String, onBack: () -> Unit) {
-    // Sample Data
-    val orderId = "DH123456"
-    val customerName = "Nguyen Van A"
-    val shippingAddress = "123 Đường ABC, Quận 1, TP.HCM"
-    val orderDate = "26/04/2025"
-    val paymentMethod = "Cash on Delivery"
-    val orderItems = listOf(
-        OrderItem("Pizza", 2, 150.0),
-        OrderItem("Burger", 1, 80.0),
-        OrderItem("Fries", 3, 30.0)
-    )
-    val totalAmount = orderItems.sumOf { it.quantity * it.pricePerItem }
+    val context = LocalContext.current
+    val order = remember { mutableStateOf<OrderModel?>(null) }
+    val isLoading = remember { mutableStateOf(true) }
+    val isAuthorized =
+        remember { mutableStateOf(true) } // mặc định true nếu đã xác thực ở màn trước
+    val repository = remember { MainRepository() }
+    val dbRef = FirebaseDatabase.getInstance().getReference("Order").child(orderId)
 
+
+    LaunchedEffect(orderId) {
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user != null) {
+            repository.checkIfUserIsAdmin { isAdmin ->
+                if (isAdmin) {
+                    val dbRef = FirebaseDatabase.getInstance().getReference("Order").child(orderId)
+                    dbRef.addValueEventListener(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            if (snapshot.exists()) {
+                                order.value = snapshot.getValue(OrderModel::class.java)
+                            } else {
+                                Toast.makeText(context, "Không tìm thấy đơn hàng", Toast.LENGTH_SHORT).show()
+                            }
+                            isLoading.value = false
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            Toast.makeText(context, "Không tải được đơn hàng", Toast.LENGTH_SHORT).show()
+                            isLoading.value = false
+                        }
+                    })
+                } else {
+                    isAuthorized.value = false
+                    isLoading.value = false
+                }
+            }
+        } else {
+            isAuthorized.value = false
+            isLoading.value = false
+        }
+    }
+
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Chi Tiết Đơn Hàng") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        when {
+            isLoading.value -> Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+
+            !isAuthorized.value -> Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Bạn không có quyền truy cập trang này.")
+            }
+
+            order.value != null -> OrderDetailContent(order = order.value!!, padding = padding)
+        }
+    }
+}
+
+
+@Composable
+fun UpdateOrderStatusButton(orderId: String) {
+    val context = LocalContext.current
+
+    // Create a list of statuses
+    val statuses = listOf("Chờ xác nhận", "Đã xác nhận", "Đang giao hàng")
+    var selectedStatus by remember { mutableStateOf(statuses[0]) }
+
+    // Keep track of dropdown visibility
+    var expanded by remember { mutableStateOf(false) }
+
+    // Create an instance of the MainRepository
+    val repository = remember { MainRepository() }
+
+    // Dropdown to choose the status
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Button to open the dropdown menu
+        Button(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
+            Text(text = "Chọn trạng thái")
+        }
+
+        // Show the dropdown menu when expanded is true
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            statuses.forEach { status ->
+                DropdownMenuItem(
+                    text = { Text(text = status) },
+                    onClick = {
+                        selectedStatus = status
+                        repository.updateOrderStatusInDatabase(orderId, selectedStatus)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+
+
+
+@Composable
+fun OrderDetailContent(order: OrderModel, padding: PaddingValues) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.Start
+            .padding(24.dp)
+            .padding(padding)
     ) {
-        Text(
-            text = "Order Details",
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF0C57CC)
-            )
-        )
+        OrderInfoRow("Mã đơn hàng:", order.orderId)
+        OrderInfoRow("Tên khách hàng:", order.userName)
+        OrderInfoRow("Địa chỉ giao hàng:", order.address)
+        OrderInfoRow("Ngày đặt:", formatTimestamp(order.timestamp))
+        OrderInfoRow("Phương thức thanh toán:", order.paymentMethod)
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Order Info
-        OrderInfoRow(label = "Order ID:", value = orderId)
-        Spacer(modifier = Modifier.height(8.dp))
-        OrderInfoRow(label = "Customer Name:", value = customerName)
-        Spacer(modifier = Modifier.height(8.dp))
-        OrderInfoRow(label = "Shipping Address:", value = shippingAddress)
-        Spacer(modifier = Modifier.height(8.dp))
-        OrderInfoRow(label = "Order Date:", value = orderDate)
-        Spacer(modifier = Modifier.height(8.dp))
-        OrderInfoRow(label = "Payment Method:", value = paymentMethod)
+        OrderInfoRow("Trạng thái:", order.status)
 
-        Spacer(modifier = Modifier.height(24.dp))
+        // Nút cập nhật trạng thái
+        UpdateOrderStatusButton(orderId = order.orderId)
 
-        // Order Items List
-        Text(
-            text = "Products",
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 18.sp
-        )
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Text("Danh sách món:", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
 
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(orderItems) { item ->
-                ProductRow(item)
-                Spacer(modifier = Modifier.height(12.dp))
+        if (order.items.isEmpty()) {
+            Text("Không có món trong đơn hàng này.", color = MaterialTheme.colorScheme.error)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(order.items) { item ->
+                    ProductRow(item)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Total
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "Total",
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp
-            )
-            Text(
-                text = "${totalAmount}  VND",
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,
-                color = Color(0xFF0C57CC)
-            )
-        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Tổng cộng: ${order.totalPrice} VND", fontWeight = FontWeight.Bold, fontSize = 20.sp)
     }
 }
 
@@ -109,54 +198,39 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit) {
 @Composable
 fun OrderInfoRow(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, fontWeight = FontWeight.Medium)
-        Text(text = value, fontWeight = FontWeight.Normal)
+        Text(label, fontWeight = FontWeight.SemiBold)
+        Text(value)
     }
 }
 
 @Composable
-fun ProductRow(item: OrderItem) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth(),
+fun ProductRow(item: FoodModel) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(12.dp),
-        color = Color(0xFFD7A888),
-        tonalElevation = 2.dp
+        elevation = CardDefaults.cardElevation(4.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    text = item.name,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 16.sp
-                )
-                Text(
-                    text = "x${item.quantity}",
-                    fontSize = 14.sp,
-                    color = Color(0xBD000000)
-                )
+        Row(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = item.Title, fontWeight = FontWeight.Bold)
+                Text(text = "x${item.numberInCart} • ${item.Price} VND", fontSize = 13.sp)
             }
             Text(
-                text = "${item.quantity * item.pricePerItem} VND",
-                fontWeight = FontWeight.Medium
+                text = "${item.numberInCart * item.Price} VND",
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.align(Alignment.CenterVertically)
             )
         }
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun OrderDetailScreenPreview() {
-    OrderDetailScreen(
-        onBack = {},
-        orderId = TODO()
-    )
+fun formatTimestamp(timestamp: Long): String {
+    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    return sdf.format(Date(timestamp))
 }
